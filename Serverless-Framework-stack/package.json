@@ -1,0 +1,7 @@
+{
+  "dependencies": {
+    "serverless-lift": "^1.1.2",
+    "aws-sdk": "^2.1024.0",
+    "serverless-vpc-plugin": "^1.0.4"
+  }
+}

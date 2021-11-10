@@ -1,0 +1,106 @@
+service: ${file(./config.js):main_stack_name}
+variablesResolutionMode: 20210326
+frameworkVersion: '2'
+
+provider:
+  name: aws
+  region: ${file(./config.js):region}
+  runtime: nodejs12.x
+  lambdaHashingVersion: '20201221'
+  vpc:
+    securityGroupIds:
+      - !Ref ServerlessSecurityGroup
+    subnetIds: ${ssm:/SLS/${file(./config.js):vpc_stack_name}-${opt:stage, 'dev'}/AppSubnets}
+
+package:
+  artifact: lambdas.zip
+
+constructs:
+  jobs:
+    type: queue
+    worker:
+      handler: lambdas/sqsListner.handler
+      # memorySize: 512 
+      runtime: nodejs12.x 
+      fileSystemConfig:
+        localMountPath: /mnt${file(./config.js):mount_dir}
+        arn: !GetAtt AccessPoint.Arn
+
+functions:
+  SQSWriter:
+    handler: lambdas/sqsWriter.handler
+    # memorySize: 512 
+    runtime: nodejs12.x 
+    timeout: 60 
+    events:
+      - httpApi:
+          method: post
+          path: /write-to-sqs
+    environment:
+      QUEUE_URL: ${construct:jobs.queueUrl}
+  
+plugins:
+  - serverless-lift
+   
+resources:
+  Resources:
+  
+    ElasticFileSystem:
+      Type: AWS::EFS::FileSystem
+      Properties:
+        Encrypted: false
+        PerformanceMode: generalPurpose
+        FileSystemPolicy:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: "Allow"
+              Action:
+                - "elasticfilesystem:ClientMount"
+                - "elasticfilesystem:ClientWrite"
+              Principal:
+                AWS: "*"
+      UpdateReplacePolicy: Delete
+      DeletionPolicy: Delete
+    
+    AccessPoint:
+      Type: AWS::EFS::AccessPoint
+      Properties:
+        FileSystemId: !Ref ElasticFileSystem
+        PosixUser:
+          Uid: "1000"
+          Gid: "1000"
+        RootDirectory:
+          CreationInfo:
+            OwnerGid: "1000"
+            OwnerUid: "1000"
+            Permissions: "777"
+          Path: ${file(./config.js):mount_dir}
+      DependsOn:
+        - MountTargetA
+        - MountTargetB
+
+    MountTargetA:
+      Type: AWS::EFS::MountTarget
+      Properties:
+        FileSystemId: !Ref ElasticFileSystem
+        SecurityGroups:
+          - !Ref ServerlessSecurityGroup
+        SubnetId: ${file(./subnetfile.js):0}
+
+    MountTargetB:
+      Type: AWS::EFS::MountTarget
+      Properties:
+        FileSystemId: !Ref ElasticFileSystem
+        SecurityGroups:
+          - !Ref ServerlessSecurityGroup
+        SubnetId: ${file(./subnetfile.js):1}
+
+        
+    ServerlessSecurityGroup:
+        Type: AWS::EC2::SecurityGroup
+        Properties:
+          GroupDescription: SecurityGroup for Serverless Functions
+          VpcId: ${ssm:/SLS/${file(./config.js):vpc_stack_name}-${opt:stage, 'dev'}/VPC}
+          SecurityGroupIngress:
+            - IpProtocol:  "-1"
+              CidrIp: "0.0.0.0/0"
