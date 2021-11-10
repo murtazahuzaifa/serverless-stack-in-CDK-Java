@@ -1,4 +1,4 @@
-# Developer Guide for Serverless Framework
+# Developer Guide
 
 ### Installation
 - Java
