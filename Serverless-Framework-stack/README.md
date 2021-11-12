@@ -10,7 +10,7 @@
 
 ## Main Files
 ### Stack Files
-In the root directory, there are two stack files `vpc-stack.yml` and `main-stack.yml`. In the `vpc-stack.yml` file the VPC is defined with help of `serverless-vpc-plugin` and in the `main-stack.yml` file all the remaining resources are defined.
+In the root directory, there is a main stack file `main.yml` where all the resources are defined.
 
 #### Resourece Used
 - VPC.
@@ -23,21 +23,14 @@ In the root directory, there are two stack files `vpc-stack.yml` and `main-stack
 In the config file these are variables that are used in the stack files.
 ```javascript
 // config.js
-const vpc_stack_name = "vpc-dev";
-const main_stack_name = "main-serverless-dev";
+const stack_name = "serverless-app-stack";
 const region = "us-east-1";
 const mount_dir = "/myDir";
-const stage = "dev";
 ```
-- `vpc_stack_name` is used in both the stack files to reference the stack name in which the VPC is defines.
-- `main_stack_name`  is used in `main-stack.yml` file to reference the stack name
-- `region` is used in both the stack files which represents the region where both the stack should deploy.
-- `mount_dir` is used in `main-stack.yml` file which represents that where lambda function can write files. For example in our case `/mnt/myDir`. `/mnt` is the default directory in the lambda's file system where `mount_dir` will be created.
-- `stage` is used in `subnetfile.js` file which should always be `dev` when deploying the stack with `serverless deploy` command but make sure to change the stage name when deploying with `serverless deploy --stage production` command, like in this case stage should be `const stage = "production"`.
+- `stack_name` is used in reference the stack name.
+- `region` represents that where the stack should deploy.
+- `mount_dir` represents that where lambda function can write files. For example in our case `/mnt/myDir`, where `/mnt` is the default directory in the lambda's file system where `mount_dir` will be created.
 
-
-### subnetfile.js
-This is a script file which is used to fetch VPC subnet IDs while deploy the `main-stack.yml`.
 
 ### package.json
 This is a Nodejs file where some of the deployment related plugins are present 
@@ -49,14 +42,12 @@ This is a Nodejs file where some of the deployment related plugins are present
 ### Stack Deployment Command
 Run the following command to deploy the stack.
 1) `npm i` this will install all the required plugins used in the stack files.
-2) `serverless deploy --config vpc-stack.yml && serverless deploy --config main-stack.yml`. 
-
-<b>Note: </b> Make sure always deploy the `vpc-stack` first then deploy the `main-stack` to set up everything properly.
+2) `serverless deploy --config main.yml`. 
 
 <br>
 
 ### Stack Delete Command
-- `serverless remove --config main-stack.yml && serverless remove --config vpc-stack.yml`
+- `serverless remove  --config main.yml`
 
 
 <br>

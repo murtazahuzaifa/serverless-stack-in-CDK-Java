@@ -1,4 +1,4 @@
-service: ${file(./config.js):main_stack_name}
+service: ${file(./config.js):stack_name}
 variablesResolutionMode: 20210326
 frameworkVersion: '2'
 
@@ -10,7 +10,9 @@ provider:
   vpc:
     securityGroupIds:
       - !Ref ServerlessSecurityGroup
-    subnetIds: ${ssm:/SLS/${file(./config.js):vpc_stack_name}-${opt:stage, 'dev'}/AppSubnets}
+    subnetIds:
+      - Ref: PrivateSubnet
+      - Ref: PublicSubnet
 
 package:
   artifact: lambdas.zip
@@ -31,7 +33,7 @@ functions:
     handler: lambdas/sqsWriter.handler
     # memorySize: 512 
     runtime: nodejs12.x 
-    timeout: 60 
+    timeout: 29
     events:
       - httpApi:
           method: post
@@ -41,10 +43,92 @@ functions:
   
 plugins:
   - serverless-lift
-   
+
+
 resources:
   Resources:
-  
+    Vpc:
+      Type: AWS::EC2::VPC
+      Properties:
+        CidrBlock: 10.0.0.0/16
+    PrivateSubnet:
+      Type: AWS::EC2::Subnet
+      Properties:
+        AvailabilityZone: ${file(./config.js):vpc_zones.0}
+        CidrBlock: 10.0.1.0/24
+        VpcId:
+          Ref: Vpc
+    PublicSubnet:
+      Type: AWS::EC2::Subnet
+      Properties:
+        AvailabilityZone: ${file(./config.js):vpc_zones.1}
+        CidrBlock: 10.0.21.0/24
+        VpcId:
+          Ref: Vpc
+    Eip:
+      Type: AWS::EC2::EIP
+      Properties:
+        Domain: vpc
+    NatGateway:
+      Type: AWS::EC2::NatGateway
+      Properties:
+        AllocationId:
+          Fn::GetAtt:
+            - Eip
+            - AllocationId
+        SubnetId:
+          Ref: PublicSubnet
+    PrivateRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId:
+          Ref: Vpc
+    PrivateRoute:
+      Type: AWS::EC2::Route
+      Properties:
+        RouteTableId:
+          Ref: PrivateRouteTable
+        DestinationCidrBlock: 0.0.0.0/0
+        NatGatewayId:
+          Ref: NatGateway
+    SubnetRouteTableAssociationPrivate:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        SubnetId:
+          Ref: PrivateSubnet
+        RouteTableId:
+          Ref: PrivateRouteTable
+
+    InternetGateway:
+      Type: AWS::EC2::InternetGateway
+    VPCGatewayAttachment:
+      Type: AWS::EC2::VPCGatewayAttachment
+      Properties:
+        VpcId:
+          Ref: Vpc
+        InternetGatewayId:
+          Ref: InternetGateway
+    PublicRouteTable:
+      Type: AWS::EC2::RouteTable
+      Properties:
+        VpcId:
+          Ref: Vpc
+    PublicRoute:
+      Type: AWS::EC2::Route
+      Properties:
+        RouteTableId:
+          Ref: PublicRouteTable
+        DestinationCidrBlock: 0.0.0.0/0
+        GatewayId:
+          Ref: InternetGateway
+    SubnetRouteTableAssociationPublic:
+      Type: AWS::EC2::SubnetRouteTableAssociation
+      Properties:
+        SubnetId:
+          Ref: PublicSubnet
+        RouteTableId:
+          Ref: PublicRouteTable
+
     ElasticFileSystem:
       Type: AWS::EFS::FileSystem
       Properties:
@@ -85,7 +169,7 @@ resources:
         FileSystemId: !Ref ElasticFileSystem
         SecurityGroups:
           - !Ref ServerlessSecurityGroup
-        SubnetId: ${file(./subnetfile.js):0}
+        SubnetId: !Ref PrivateSubnet
 
     MountTargetB:
       Type: AWS::EFS::MountTarget
@@ -93,14 +177,14 @@ resources:
         FileSystemId: !Ref ElasticFileSystem
         SecurityGroups:
           - !Ref ServerlessSecurityGroup
-        SubnetId: ${file(./subnetfile.js):1}
+        SubnetId: !Ref PublicSubnet
 
         
     ServerlessSecurityGroup:
         Type: AWS::EC2::SecurityGroup
         Properties:
           GroupDescription: SecurityGroup for Serverless Functions
-          VpcId: ${ssm:/SLS/${file(./config.js):vpc_stack_name}-${opt:stage, 'dev'}/VPC}
+          VpcId: !Ref Vpc
           SecurityGroupIngress:
             - IpProtocol:  "-1"
               CidrIp: "0.0.0.0/0"
